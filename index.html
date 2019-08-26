@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+        <meta name="description" content="A simple Aiken format tester for Moodle question bank.">
+        <meta name="keywords" content="Moodle,Question Bank,Quiz,Aiken,Format,Tester">
+        <meta name="author" content="Koo Tito Novelianto">
+
+        <title>Aiken Format Tester</title>
+
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+        <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+    </head>
+    <body>
+        <noscript><h1>This application requires Javascript!</h1></noscript>
+
+        <div class="container">
+            <div class="container mt-4">
+                <h1 class="text-center">Aiken format tester <span class="badge badge-pill badge-warning align-top">alpha</span></h1>
+            </div>
+
+            <div class="container mt-4">
+                <textarea id="aikenText" class="form-control form-control-sm text-monospace" style="min-height: 300px" placeholder="Enter your Aiken-formatted text here..."></textarea>
+                <div class="d-flex justify-content-end">
+                    <div id="rowColField" class="p-2">0, 0</div>
+                </div>
+            </div>
+
+            <div class="container mt-4">
+                <h6>Test result:</h6>
+                <div id="testResult" class="border rounded p-2 bg-light text-monospace" style="min-height: 100px"></div>
+            </div>
+        </div>
+
+        <script>
+            'use strict';
+
+            var textArea = document.getElementById('aikenText');
+            var rowColText = document.getElementById('rowColField');
+            var resultText = document.getElementById('testResult');
+
+            var updateTimer = null;
+
+            var LINE_NONE = -1;
+            var LINE_QUESTION = 0;
+            var LINE_CHOICE_A = 1;
+            var LINE_CHOICE_B = 2;
+            var LINE_CHOICE_C = 3;
+            var LINE_CHOICE_D = 4;
+            var LINE_CHOICE_E = 5;
+            var LINE_CHOICE_F = 6;
+            var LINE_ANSWER = 7;
+
+            var CH_UNSET = null;
+            var CH_DOT = '.';
+            var CH_PAR = ')';
+
+            // var RE_WHITESPACE_LINE = new RegExp('^\\s+$');
+            // var RE_ASCII_PRINTABLE = new RegExp('[\x20-\x7E]+', 'g');
+
+            function isWhitespaceLine (s) {
+                return s.match(/^\s+$/g) === null
+            }
+
+            function isPrintableASCII (s) {
+                return s.match(/[\x00-\x1F\x7F-\x9F]/g) === null;
+            }
+
+            function isAnswerLine (s) {
+                var r = s.match(/^ANSWER: (A|B|C|D|E|F)$/g);
+                return r !== null && r.length === 1 && r[0] === s;
+            }
+
+            function _evaluateAiken (s) {
+                var lines = s.split('\n');
+                var qCount = 0;
+
+                var errors = [];
+
+                var state = LINE_NONE;
+
+                var chOption = CH_UNSET;
+
+                var i = 0;
+
+                for (; i < lines.length; i++) {
+                    var curLine = lines[i];
+                    var curLength = curLine.length;
+
+                    var trimLine = curLine.trim();
+                    var trimLength = trimLine.length;
+
+                    if (state === LINE_NONE) {
+                        if (curLength === 0) {
+                            continue;
+                        } else if (trimLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'whitespace character(s) in an empty line'
+                            });
+                            continue;
+                        } else if (isAnswerLine(trimLine)) {
+                            errors.push({
+                                row: i,
+                                message: 'unexpected answer line'
+                            });
+                            continue;
+                        } else {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (!isPrintableASCII(trimLine)) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line contains special character(s), import might fail because of this'
+                                });
+                            }
+                            state = LINE_QUESTION;
+                        }
+                    } else if (state === LINE_QUESTION) {
+                        if (curLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'line must contain choice, not empty'
+                            });
+                            continue;
+                        } else if (trimLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'whitespace character(s) in an empty line'
+                            });
+                            continue;
+                        } else if (isAnswerLine(trimLine)) {
+                            errors.push({
+                                row: i,
+                                message: 'unexpected answer line, expected at least 3 choices.'
+                            });
+
+                            state = LINE_ANSWER;
+                        } else {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (trimLength <= 3) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice line'
+                                });
+                            } else if (!isPrintableASCII(trimLine)) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line contains special character(s), import might fail because of this'
+                                });
+                            } else if (trimLine[0] !== 'A') {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice name character, expected \'A\''
+                                });
+                            } else {
+                                var opt = trimLine[1];
+                                if ([CH_DOT, CH_PAR].indexOf(opt) === -1) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'.\' or \')\''
+                                    });
+                                } else {
+                                    chOption = opt;
+
+                                    if (trimLine[2] !== ' ') {
+                                        errors.push({
+                                            row: i,
+                                            message: 'invalid character, expected a space after \'.\' or \')\''
+                                        });
+                                    }
+                                }
+                            }
+
+                            state = LINE_CHOICE_A;
+                        }
+                    } else if (state === LINE_CHOICE_A) {
+                        if (curLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'line must contain choice, not empty'
+                            });
+                            continue;
+                        } else if (trimLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'whitespace character(s) in an empty line'
+                            });
+                            continue;
+                        } else if (isAnswerLine(trimLine)) {
+                            errors.push({
+                                row: i,
+                                message: 'unexpected answer line, expected at least 3 choices.'
+                            });
+
+                            state = LINE_ANSWER;
+                        } else {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (trimLength <= 3) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice line'
+                                });
+                            } else if (!isPrintableASCII(trimLine)) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line contains special character(s), import might fail because of this'
+                                });
+                            } else if (trimLine[0] !== 'B') {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice name character, expected \'B\''
+                                });
+                            } else {
+                                var opt = trimLine[1];
+                                if ([CH_DOT, CH_PAR].indexOf(opt) === -1) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'.\' or \')\''
+                                    });
+                                } else if (chOption !== CH_UNSET && opt !== chOption) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'' + chOption + '\''
+                                    });
+                                } else if (trimLine[2] !== ' ') {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character, expected a space after \'.\' or \')\''
+                                    });
+                                }
+                            }
+
+                            state = LINE_CHOICE_B;
+                        }
+                    } else if (state === LINE_CHOICE_B) {
+                        if (curLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'line must contain choice, not empty'
+                            });
+                            continue;
+                        } else if (trimLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'whitespace character(s) in an empty line'
+                            });
+                            continue;
+                        } else if (isAnswerLine(trimLine)) {
+                            errors.push({
+                                row: i,
+                                message: 'unexpected answer line, expected at least 3 choices.'
+                            });
+
+                            state = LINE_ANSWER;
+                        } else {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (trimLength <= 3) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice line'
+                                });
+                            } else if (!isPrintableASCII(trimLine)) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line contains special character(s), import might fail because of this'
+                                });
+                            } else if (trimLine[0] !== 'C') {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice name character, expected \'C\''
+                                });
+                            } else {
+                                var opt = trimLine[1];
+                                if ([CH_DOT, CH_PAR].indexOf(opt) === -1) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'.\' or \')\''
+                                    });
+                                } else if (chOption !== CH_UNSET && opt !== chOption) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'' + chOption + '\''
+                                    });
+                                } else if (trimLine[2] !== ' ') {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character, expected a space after \'.\' or \')\''
+                                    });
+                                }
+                            }
+
+                            state = LINE_CHOICE_C;
+                        }
+                    } else if (state === LINE_CHOICE_C) {
+                        if (curLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'line must contain choice, not empty'
+                            });
+                            continue;
+                        } else if (trimLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'whitespace character(s) in an empty line'
+                            });
+                            continue;
+                        } else if (isAnswerLine(trimLine)) {
+                            if (['A', 'B', 'C'].indexOf(trimLine[trimLength - 1]) === -1) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid answer, expecting \'A\', \'B\', or \'C\''
+                                });
+                            }
+
+                            state = LINE_ANSWER;
+                        } else {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (trimLength <= 3) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice line'
+                                });
+                            } else if (!isPrintableASCII(trimLine)) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line contains special character(s), import might fail because of this'
+                                });
+                            } else if (trimLine[0] !== 'D') {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice name character, expected \'D\''
+                                });
+                            } else {
+                                var opt = trimLine[1];
+                                if ([CH_DOT, CH_PAR].indexOf(opt) === -1) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'.\' or \')\''
+                                    });
+                                } else if (chOption !== CH_UNSET && opt !== chOption) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'' + chOption + '\''
+                                    });
+                                } else if (trimLine[2] !== ' ') {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character, expected a space after \'.\' or \')\''
+                                    });
+                                }
+                            }
+
+                            state = LINE_CHOICE_D;
+                        }
+                    } else if (state === LINE_CHOICE_D) {
+                        if (curLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'line must contain choice, not empty'
+                            });
+                            continue;
+                        } else if (trimLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'whitespace character(s) in an empty line'
+                            });
+                            continue;
+                        } else if (isAnswerLine(trimLine)) {
+                            if (['A', 'B', 'C', 'D'].indexOf(trimLine[trimLength - 1]) === -1) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid answer, expecting \'A\', \'B\', \'C\', or \'D\''
+                                });
+                            }
+
+                            state = LINE_ANSWER;
+                        } else {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (trimLength <= 3) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice line'
+                                });
+                            } else if (!isPrintableASCII(trimLine)) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line contains special character(s), import might fail because of this'
+                                });
+                            } else if (trimLine[0] !== 'E') {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice name character, expected \'E\''
+                                });
+                            } else {
+                                var opt = trimLine[1];
+                                if ([CH_DOT, CH_PAR].indexOf(opt) === -1) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'.\' or \')\''
+                                    });
+                                } else if (chOption !== CH_UNSET && opt !== chOption) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'' + chOption + '\''
+                                    });
+                                } else if (trimLine[2] !== ' ') {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character, expected a space after \'.\' or \')\''
+                                    });
+                                }
+                            }
+
+                            state = LINE_CHOICE_E;
+                        }
+                    }  else if (state === LINE_CHOICE_E) {
+                        if (curLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'line must contain choice, not empty'
+                            });
+                            continue;
+                        } else if (trimLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'whitespace character(s) in an empty line'
+                            });
+                            continue;
+                        } else if (isAnswerLine(trimLine)) {
+                            if (['A', 'B', 'C', 'D', 'E'].indexOf(trimLine[trimLength - 1]) === -1) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid answer, expecting \'A\', \'B\', \'C\', \'D\', or \'E\''
+                                });
+                            }
+
+                            state = LINE_ANSWER;
+                        } else {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (trimLength <= 3) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice line'
+                                });
+                            } else if (!isPrintableASCII(trimLine)) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line contains special character(s), import might fail because of this'
+                                });
+                            } else if (trimLine[0] !== 'F') {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid choice name character, expected \'F\''
+                                });
+                            } else {
+                                var opt = trimLine[1];
+                                if ([CH_DOT, CH_PAR].indexOf(opt) === -1) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'.\' or \')\''
+                                    });
+                                } else if (chOption !== CH_UNSET && opt !== chOption) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character after choice name, expected \'' + chOption + '\''
+                                    });
+                                } else if (trimLine[2] !== ' ') {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character, expected a space after \'.\' or \')\''
+                                    });
+                                }
+                            }
+
+                            state = LINE_CHOICE_F;
+                        }
+                    } else if (state === LINE_CHOICE_F) {
+                        if (curLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'line must contain answer, not empty'
+                            });
+                            continue;
+                        } else if (trimLength === 0) {
+                            errors.push({
+                                row: i,
+                                message: 'whitespace character(s) in an empty line'
+                            });
+                            continue;
+                        } else {
+                            if (isAnswerLine(trimLine)) {
+                                if (['A', 'B', 'C', 'D', 'E', 'F'].indexOf(trimLine[trimLength - 1]) === -1) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid answer, expecting \'A\', \'B\', \'C\', \'D\', \'E\', or \'F\''
+                                    });
+                                }
+                            } else {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid line, expected an answer line'
+                                })
+                            }
+
+                            state = LINE_ANSWER;
+                        }
+                    } else if (state === LINE_ANSWER) {
+                        chOption = CH_UNSET;
+                        qCount++;
+
+                        if (trimLength === 0) {
+                            if (curLength !== 0) {
+                                errors.push({
+                                    row: i,
+                                    message: 'there must be an empty line between questions'
+                                });
+                            } else if (curLength !== trimLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'whitespace character(s) in an empty line'
+                                });
+                            }
+                        } else {
+                            errors.push({
+                                row: i,
+                                message: 'there must be an empty line between questions'
+                            });
+                        }
+
+                        state = LINE_NONE;
+                        --i; // backtrack.
+                    } else {
+                        chOption = CH_UNSET;
+
+                        errors.push({
+                            row: i,
+                            message: 'unexpected state code ' + state + ', this might be a bug.'
+                        });
+
+                        state = LINE_NONE;
+                        --i; // backtrack.
+                    }
+                }
+
+                if (state !== LINE_NONE && state !== LINE_ANSWER) {
+                    errors.push({
+                        row: i,
+                        message: 'unexpected end of file'
+                    });
+                }
+
+                errors.push({
+                    message: 'found ' + qCount + ' question(s) in total'
+                })
+
+                return errors;
+            }
+
+            function evaluateAiken () {
+                console.log('AIKEN: evaluate begin');
+
+                try {
+                    var val = textArea.value;
+                    var result = _evaluateAiken(val);
+                    var rLen = result.length;
+
+                    if (rLen === 0) {
+                        console.info('AIKEN: no error');
+                        setResultText('Test successful, no errors found!');
+                    } else {
+                        console.info('AIKEN: error(s) found');
+                        setResultText(null);
+
+                        for (var i=0; i<result.length; i++) {
+                            var err = result[i];
+
+                            var messageParent = document.createElement('div');
+                            var messageText = document.createElement('span');
+
+                            messageParent.classList.add('p-1', 'row');
+
+                            if (err.row !== undefined) {
+                                var messageLink = document.createElement('a');
+
+                                messageLink.classList.add('col-sm-1');
+                                messageLink.href = '#';
+                                messageLink.setAttribute('row', err.row);
+                                messageLink.onclick = highlightRow;
+                                messageLink.innerText = err.row;
+
+                                messageParent.appendChild(messageLink);
+                            }
+
+                            messageText.classList.add('col-sm-10');
+                            messageText.innerText = err.message;
+                        
+                            messageParent.appendChild(messageText);
+                            resultText.appendChild(messageParent);
+                        }
+                    }
+                } catch (ex) {
+                    console.error('AIKEN: unexpected error:', ex);
+                    setResultText('Unexpected error while evaluating aiken text, check console for more information.');
+                }
+
+                console.log('AIKEN: evaluate finish');
+            }
+
+            function highlightRow (event) {
+                event.preventDefault();
+
+                var r = parseInt(event.target.getAttribute('row'));
+
+                if (!isNaN(r) && r >= 0) {
+                    var val = textArea.value;
+                    var all = val.split('\n');
+
+                    if (r < all.length) {
+                        var c = 0;
+                        var l = 0;
+                        for (; l<r; l++) {
+                            c += all[l].length + 1;
+                        }
+
+                        // truncate first
+                        var end = c + all[l].length;
+
+                        var first = val.substr(0, end);
+
+                        textArea.value = first;
+                        textArea.scrollTop = textArea.scrollHeight;
+                        textArea.value = val;
+
+                        textArea.setSelectionRange(c, end);
+
+                        setRowCol(textArea);
+
+                        console.log("DEBUG", c, end);
+                    } else {
+                        console.log("DEBUG EOF?", r, all.length);
+                        textArea.setSelectionRange(textArea.value.length - all[all.length - 1].length, textArea.value.length);
+                    }
+                } else {
+                    console.log("DEBUG ERR", event.target.getAttribute('row'), r);
+                    textArea.setSelectionRange(0, 0);
+                }
+
+                textArea.focus();
+            }
+
+            function setResultText (s) {
+                resultText.innerText = s;
+            }
+
+            function resetResult () {
+                setResultText('Awaiting test result...');
+            }
+
+            function _setRowCol (row, col) {
+                rowColText.innerText = '' + row + ', ' + col;
+            }
+
+            function setRowCol (t) {
+                var rows = t.value.substr(0, t.selectionStart).split('\n');
+                var i = rows.length - 1;
+
+                _setRowCol(i, rows[i].length);
+            }
+
+            textArea.onclick = function (event) {
+                var t = event.target;
+
+                if (t === textArea) {
+                    setRowCol(t);
+                }
+            }
+
+            textArea.onkeyup = function (event) {
+                var t = event.target;
+
+                if (t === textArea) {
+                    setRowCol(t);
+                }
+            }
+
+            textArea.oninput = function (event) {
+                var t = event.target;
+
+                if (t === textArea) {
+                    setRowCol(t);
+
+                    resetResult();
+
+                    if (updateTimer !== null) {
+                        clearTimeout(updateTimer);
+                    }
+                    updateTimer = setTimeout(evaluateAiken, 200);
+                }
+            };
+        </script>
+    </body>
+</html>
