@@ -575,7 +575,9 @@
                     }
                 }
 
-                if (state !== LINE_NONE && state !== LINE_ANSWER) {
+                if (state === LINE_NONE || state === LINE_ANSWER) {
+                    qCount++;
+                } else {
                     errors.push({
                         row: i,
                         message: 'unexpected end of file'
