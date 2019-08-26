@@ -68,7 +68,7 @@
             }
 
             function isPrintableASCII (s) {
-                return s.match(/[\x00-\x1F\x7F-\x9F]/g) === null;
+                return s.match(/[^!-~ \t]/g) === null;
             }
 
             function isAnswerLine (s) {
