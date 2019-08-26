@@ -72,8 +72,8 @@
             }
 
             function isAnswerLine (s) {
-                var r = s.match(/^ANSWER: (A|B|C|D|E|F)$/g);
-                return r !== null && r.length === 1 && r[0] === s;
+                var r = s.match(/^ANSWER:/g); /* /^ANSWER: (A|B|C|D|E|F)$/g */
+                return r !== null && r.length === 1 && r[0] === s.substr(0, 7);
             }
 
             function _evaluateAiken (s) {
@@ -326,7 +326,22 @@
                             });
                             continue;
                         } else if (isAnswerLine(trimLine)) {
-                            if (['A', 'B', 'C'].indexOf(trimLine[trimLength - 1]) === -1) {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (trimLine.length !== 9) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid answer line'
+                                });
+                            } else if (trimLine[7] !== ' ') {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid character, expected a space after \':\''
+                                });
+                            } else if (['A', 'B', 'C'].indexOf(trimLine[trimLength - 1]) === -1) {
                                 errors.push({
                                     row: i,
                                     message: 'invalid answer, expecting \'A\', \'B\', or \'C\''
@@ -391,7 +406,22 @@
                             });
                             continue;
                         } else if (isAnswerLine(trimLine)) {
-                            if (['A', 'B', 'C', 'D'].indexOf(trimLine[trimLength - 1]) === -1) {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (trimLine.length !== 9) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid answer line'
+                                });
+                            } else if (trimLine[7] !== ' ') {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid character, expected a space after \':\''
+                                });
+                            } else if (['A', 'B', 'C', 'D'].indexOf(trimLine[trimLength - 1]) === -1) {
                                 errors.push({
                                     row: i,
                                     message: 'invalid answer, expecting \'A\', \'B\', \'C\', or \'D\''
@@ -456,7 +486,22 @@
                             });
                             continue;
                         } else if (isAnswerLine(trimLine)) {
-                            if (['A', 'B', 'C', 'D', 'E'].indexOf(trimLine[trimLength - 1]) === -1) {
+                            if (trimLength !== curLength) {
+                                errors.push({
+                                    row: i,
+                                    message: 'line must not be padded with whitespace'
+                                });
+                            } else if (trimLine.length !== 9) {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid answer line'
+                                });
+                            } else if (trimLine[7] !== ' ') {
+                                errors.push({
+                                    row: i,
+                                    message: 'invalid character, expected a space after \':\''
+                                });
+                            } else if (['A', 'B', 'C', 'D', 'E'].indexOf(trimLine[trimLength - 1]) === -1) {
                                 errors.push({
                                     row: i,
                                     message: 'invalid answer, expecting \'A\', \'B\', \'C\', \'D\', or \'E\''
@@ -522,7 +567,22 @@
                             continue;
                         } else {
                             if (isAnswerLine(trimLine)) {
-                                if (['A', 'B', 'C', 'D', 'E', 'F'].indexOf(trimLine[trimLength - 1]) === -1) {
+                                if (trimLength !== curLength) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'line must not be padded with whitespace'
+                                    });
+                                } else if (trimLine.length !== 9) {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid answer line'
+                                    });
+                                } else if (trimLine[7] !== ' ') {
+                                    errors.push({
+                                        row: i,
+                                        message: 'invalid character, expected a space after \':\''
+                                    });
+                                } else if (['A', 'B', 'C', 'D', 'E', 'F'].indexOf(trimLine[8]) === -1) {
                                     errors.push({
                                         row: i,
                                         message: 'invalid answer, expecting \'A\', \'B\', \'C\', \'D\', \'E\', or \'F\''
@@ -575,9 +635,9 @@
                     }
                 }
 
-                if (state === LINE_NONE || state === LINE_ANSWER) {
+                if (state === LINE_ANSWER) {
                     qCount++;
-                } else {
+                } else if (state !== LINE_NONE) {
                     errors.push({
                         row: i,
                         message: 'unexpected end of file'
