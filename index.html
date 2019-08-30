@@ -26,7 +26,15 @@
 
             <div class="container mt-4">
                 <textarea id="aikenText" class="form-control form-control-sm text-monospace" style="min-height: 300px" placeholder="Enter your Aiken-formatted text here..."></textarea>
-                <div class="d-flex justify-content-end">
+                <div class="d-flex align-items-center">
+                    <div class="btn-group-sm" role="group" aria-label="Basic operations">
+                        <button id="btnGroupDrop1" type="button" class="btn btn-sm btn-secondary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Tools</button>
+                        <div class="dropdown-menu" aria-labelledby="btnGroupDrop1">
+                            <a id="opReplaceCommonChars" class="dropdown-item" href="#">Replace known special characters</a>
+                            <a id="opClearWhitespacePadding" class="dropdown-item" href="#">Remove whitespace padding</a>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1"></div>
                     <div id="rowColField" class="p-2">0, 0</div>
                 </div>
             </div>
@@ -43,6 +51,8 @@
             var textArea = document.getElementById('aikenText');
             var rowColText = document.getElementById('rowColField');
             var resultText = document.getElementById('testResult');
+            var btnReplaceCommonChars = document.getElementById('opReplaceCommonChars');
+            var btnClearWhitespacePadding = document.getElementById('opClearWhitespacePadding');
 
             var updateTimer = null;
 
@@ -701,6 +711,21 @@
                 console.log('AIKEN: evaluate finish');
             }
 
+            function replaceCommonChars (s) {
+                return s.replace(/’/g, "'").replace(/“/g, '"').replace(/”/g, '"').replace(/…/g, '...').replace(/–/g, '--').replace(/—/g, '--')
+            }
+
+            function clearWhitespacePadding (s) {
+                var all = s.split('\n');
+                for (var i = 0; i < all.length; i++) {
+                    var t = all[i].trim();
+                    if (t.length != all[i].length) {
+                        all[i] = t;
+                    }
+                }
+                return all.join('\n');
+            }
+
             function highlightRow (event) {
                 event.preventDefault();
 
@@ -762,6 +787,15 @@
                 _setRowCol(i, rows[i].length);
             }
 
+            function triggerEval () {
+                resetResult();
+
+                if (updateTimer !== null) {
+                    clearTimeout(updateTimer);
+                }
+                updateTimer = setTimeout(evaluateAiken, 200);
+            }
+
             textArea.onclick = function (event) {
                 var t = event.target;
 
@@ -783,15 +817,25 @@
 
                 if (t === textArea) {
                     setRowCol(t);
-
-                    resetResult();
-
-                    if (updateTimer !== null) {
-                        clearTimeout(updateTimer);
-                    }
-                    updateTimer = setTimeout(evaluateAiken, 200);
+                    triggerEval();
                 }
             };
+
+            btnReplaceCommonChars.onclick = function (event) {
+                event.preventDefault();
+
+                textArea.value = replaceCommonChars(textArea.value);
+                setRowCol(textArea);
+                triggerEval();
+            };
+
+            btnClearWhitespacePadding.onclick = function (event) {
+                event.preventDefault();
+
+                textArea.value = clearWhitespacePadding(textArea.value);
+                setRowCol(textArea);
+                triggerEval();
+            }
         </script>
     </body>
 </html>
